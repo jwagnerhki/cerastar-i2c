@@ -4,15 +4,25 @@ This repository is a work-in-progress implementation of microcontroller software
 
 ## Background
 
-The Cerastar mainboard exposes 5V I2C interface(s) on at least two card-edge PCB connectors. One labeled "ST9 TA" accepts a Lumberg 2351 RAST-2.5 6-pin clip-on connector. For custom I2C access purposes one can assemble a RAST-2.5 6-pin connector and cable assembly oneself. Alternatively, one can get a ready cable as a spare part (Bosch 87144041510) and cut it in half. The official purpose of "ST9 TA" is to attach an  obsolete Junkers-Bosch BM1 "bus module" (Junkers 8748300289, Junkers 8748300370). The BM1 bus module bridges the I2C interface of the mainboard to an external CAN bus. Various Junkers thermostat units can be attached to that CAN bus (FR 100, TA 250, ...).
+The Cerastar mainboard exposes 5V I2C interface(s) on an on-board pad array and on two card-edge PCB connectors. One labeled "ST9 TA" accepts a Lumberg 2351 RAST-2.5 6-pin clip-on connector. The other labeled "ST7" has traces that connect directly to test pads above, labeled GND/5V/SDA/SCL. Whether ST9, ST7, and pads are the same I2C bus is unclear/untested.
 
-For home automation and remote control of the Cerastar it would be nice to attach a microcontroller directly to the mainboard I2C, avoiding the pricey and now hard to get BM1 bus module and complications of the CAN bus. Luckily, people on a mikrocontroller.net forum who own a Cerastar ZWR/ZSR and a BM1 bus module have been able to sniff the I2C traffic between the Cerastar and BM1. A lot has been reverse-engineered, see https://www.mikrocontroller.net/topic/81265
+Card edge connector "ST9 TA" officially accepts an obsolete Junkers-Bosch BM1 "bus module" (Junkers 8748300289, Junkers 8748300370). The BM1 bridges mainboard I2C interface over to an external CAN bus. The BM1 is based on a 1990'ies NXP P80C592 8-bit 80C51 MCU. The P80C592 MCU offers hardware CAN and UART (but no hardware I2C) and has a 2 x 256-byte internal RAM. One 256-byte of the page is apparently used as shared memory for communication between I2C devices (furnace mainboard, the BM1 itself) and official Junkers CAN bus devices (thermostats FR 100, TA 250, and others). This project emulates the BM1 256-byte memory. The CAN bus is (NB: eventually - currently absent) replaced by Wifi.
+
+People on a mikrocontroller.net forum have traced I2C traffic between a Cerastar furnace and a real BM1. They were able to deduce most of the I2C user protocol.
+
+For the whole background, see the thread https://www.mikrocontroller.net/topic/81265
+
+For the source code used as a basis of this project, see the 05.03.2023 post by Joe L. (joe_l626) in that thread and his code, esp. [junkers.cpp](https://www.mikrocontroller.net/attachment/590667/junkers.cpp)
 
 ## Components
 
 1. 1 x Lumberg 2351 RAST-2.5 6-pin connector (Digikey) plus pins, some cabling - or directly a Bosch 87144041510 cable from somewhere
 2. 5V microcontroller, Arduino Nano in case of this project, and som
 3. (future plan: 5V<=>3.3V I2C level shifter board, plus an Arduino Nano 33 IoT or maybe a Raspberry Pi Pico W wifi)
+
+The RAST-2.5 6-pin connector cable assembly (or a Bosch 87144041510 cable) will be attached to "ST9 TA" (5V I2C bus) and to the microcontroller 5V, GND, SDA, SCL pins. No pull-up resistors needed.
+
+...
 
 ## I2C Bus Traffic Details
 
