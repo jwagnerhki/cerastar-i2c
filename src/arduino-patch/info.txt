@@ -1,0 +1,9 @@
+See https://github.com/arduino/ArduinoCore-avr/pull/550
+
+"Extend the Wire object by an onRequestMore callback. Example code is included.
+
+The pull request extends the existing onRequest callback mechanism in the I2C target mode. The existing onRequest callback provides some data into the transmit buffer. However, that callback is invoked only once at the very start of the I2C transaction. There was no mechanism to top up further data mid-way into a continued transaction.
+
+In more dynamic protocols, the actual number of bytes that the I2C controller is expecting is sometimes not known in advance - the controller tries to clock in as many bytes as it needs, before terminating the transaction. If the onRequest -provided initial data get depleted, the new onRequestMore is invoked and allows the user to top up the transmit buffer. The onRequestMore gets invoked each time the transmit buffer runs empty, as long as the I2C transaction is still active, i.e., until the I2C controller terminates it.
+
+(Note: if these additions are acceptable, it'll probably be necessary to update https://github.com/arduino/ArduinoCore-API/blob/master/api/HardwareI2C.h by adding a corresponding new line with "virtual void onRequestMore(void(*)(void)) = 0;' to it.)"
