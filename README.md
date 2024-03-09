@@ -27,3 +27,12 @@ The RAST-2.5 6-pin connector cable assembly (or a Bosch 87144041510 cable) will 
 ## I2C Bus Traffic Details
 
 As described at https://www.mikrocontroller.net/topic/81265, ...
+
+## Compiling
+
+The Arduino Wire library has to be enhanced with minor code additions under pull request [ArduinoCore-avr/pull/550](https://github.com/arduino/ArduinoCore-avr/pull/550), see also the corresponding [patch](https://patch-diff.githubusercontent.com/raw/arduino/ArduinoCore-avr/pull/550.patch) or [diff](https://patch-diff.githubusercontent.com/raw/arduino/ArduinoCore-avr/pull/550.diff) file. The stock Wire library in Arduino supports only predetermined transaction lengths. I created the patch to add Wire support for I2C EEPROM -like arbitrary-length memory reads and writes. Such transactions classically begin by providing a base memory address, and then beginning from that base address, an "arbitrary" number of data bytes are sequentially read from target memory and clocked out by the i2c controller (or clocked in by the i2c controller and written to target memory). The i2c controller can terminate the transaction at any point it is happy with the number (or content) of data bytes it read or wrote so far. The patch adds an OnRequestMore() handler.
+
+A different approach suggested by ArduinoCore-avr developers would be to use the existing OnRequest() handler. Rather than responding by Wire.write()'ing a single byte, proactively write already 32 sequential data bytes (max. length of the hardware buffer), hoping that the recipient is not expecting more than 32 data bytes. For the gas furnace i2c this hope might actually hold true.
+
+The code under ./src/cerastarI2C/ ought to compile as is under Arduino IDE.
+
