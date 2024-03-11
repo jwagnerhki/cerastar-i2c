@@ -97,7 +97,6 @@
 #define I2C_FREQ_HZ    30000
 #define SDA_PIN  A4 //=SDA1
 #define SCL_PIN  A5 //=SCL1
-//#define SERIAL_I2C_TRACE 1
 void i2cReqHandler(void);
 void i2cReqMoreHandler(void);
 void i2cRecvHandler(int);
@@ -132,35 +131,9 @@ void i2cReqHandler(void)
 {
     const byte base_addr = i2c_offset;
     const byte data = shmem.raw_data[i2c_offset]; 
-#if 1
     Wire.write(data);
     i2c_offset++;
     i2c_tx_count++;
-#else
-    if (base_addr==0xFE) {
-        // the below works for some reason; a read from 0xFE
-        // should reply with two written bytes - would have
-        // expected i2cReqHandler() to be called for each byte
-        // to-be-clocked out repeatedly, but, nope!? 
-        Wire.write(shmem.raw_data[0xFE]);
-        i2c_offset++;
-        i2c_tx_count++;
-        Wire.write(shmem.raw_data[0xFF]);
-        i2c_tx_count++;
-    } else {
-        Wire.write(data);
-        i2c_offset++;
-        i2c_tx_count++;
-    }
-#endif
-
-#ifdef SERIAL_I2C_TRACE
-    // Serial debug dump, likely too slow in this ISR
-    Serial.print("snd: addr 0x");
-    Serial.print(base_addr, HEX);
-    Serial.print(" byte 0x");
-    Serial.println(data, HEX);
-#endif
 }
 
 // Handler: I2C Controller wants continued read from our local 256-byte memory
@@ -171,14 +144,6 @@ void i2cReqMoreHandler(void)
     Wire.write(data);
     i2c_offset++;
     i2c_tx_count++;
-
-#ifdef SERIAL_I2C_TRACE
-    // Serial debug dump, likely too slow in this ISR
-    Serial.print("snd ct'd: addr 0x");
-    Serial.print(byte_to_hex(base_addr));
-    Serial.print(" byte 0x");
-    Serial.println(byte_to_hex(data));
-#endif
 }
 
 
@@ -199,30 +164,6 @@ void i2cRecvHandler(int nbytes)
         n++;
     }
     i2c_rx_count += nbytes;
-
-#ifdef SERIAL_I2C_TRACE
-    // Serial debug dump, likely too slow in this ISR
-    Serial.print("rcv: addr 0x");
-    Serial.print(byte_to_hex(base_addr));
-    Serial.print(" n=");
-    Serial.print(nbytes, DEC);
-    if (nbytes <= 1) {
-        Serial.println(" rd_req");
-    } else {
-        n = 0;
-        while (n < (nbytes-1)) {
-          // pseudo: print(" ram[%02X]:%02X", addr, data[addr]);
-          Serial.print(" ram[");
-          Serial.print("0x");
-          Serial.print(byte_to_hex(base_addr + n));
-          Serial.print("]:");
-          Serial.print("0x");
-          Serial.print(byte_to_hex(shmem.raw_data[base_addr + n]));
-          n++;
-        }
-        Serial.println("");
-    }
-#endif
 }
 
 
