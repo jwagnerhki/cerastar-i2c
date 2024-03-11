@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //// Gas furnace state info
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -25,8 +24,6 @@ typedef struct FurnaceState_tt {
     uint8_t dummy3;       // byte 12
 } FurnaceState_t;
 
-void furnaceStateStr(const FurnaceState_t& s, String& out);
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //// Emulated BM1 Bus Module thermal controller state info
@@ -47,8 +44,6 @@ typedef struct BusmoduleState_tt {
     uint8_t dummy4;     // byte 14
     uint8_t checksum;   // byte 15
 } BusmoduleState_t;
-
-void busmoduleStateStr(const BusmoduleState_t& s, String& out);
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -286,7 +281,19 @@ typedef union I2C_RAM_tt {
     } fields;
 } I2C_RAM_t;
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+//// Init and pretty-printing functions
+////////////////////////////////////////////////////////////////////////////////////////////////
+
 void initRamDatablock(I2C_RAM_t*);
-void ramDatablockStr(const I2C_RAM_t*, String& out);
+
+void ramDatablockToStr(const I2C_RAM_t*, String& out);
+
+String byte_to_hex(unsigned char b);
+
+String furnaceStateToStr(const FurnaceState_t& s);
+String busmoduleStateToStr(const BusmoduleState_t& s);
+
 
 #endif

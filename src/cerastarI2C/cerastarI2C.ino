@@ -29,7 +29,7 @@
 // The I2C bus devices are:
 //
 //   1. I2C Target device at I2C Address 0x50,
-//      with an address space is 0...255
+//      with an address space that is 0...255
 //   2. I2C Controller - the gas furnace
 //   3. I2C Controller - the BM1 module (not present)
 //
@@ -90,37 +90,36 @@
 
 #include "crc8.h"
 #include "i2c-ramblock.h"
+#include "furnace.h"
 
+// I2C properties of our emulated 256-byte target memory
 #define I2C_TARGET_ADDR 0x50
 #define I2C_FREQ_HZ    30000
 #define SDA_PIN  A4 //=SDA1
 #define SCL_PIN  A5 //=SCL1
-
-#define SAMPLING_INTERVAL_MSEC  1000
-#define REPORTING_INTERVAL_MSEC 5000
-#define UPDATING_INTERVAL_MSEC  2000
-
 //#define SERIAL_I2C_TRACE 1
+void i2cReqHandler(void);
+void i2cReqMoreHandler(void);
+void i2cRecvHandler(int);
 
+// 256-Byte Memory Area
 static volatile I2C_RAM_t shmem;
 static volatile byte i2c_last_cmd_offset = 0;
 static volatile byte i2c_offset = 0;
 static volatile byte i2c_rx_count = 0;
 static volatile byte i2c_tx_count = 0;
 
+// Copies of key data areas of the 256-Byte memory
 FurnaceState_t sampled_furnace_state;
 BusmoduleState_t sampled_bm1_state;
 
+#define SAMPLING_INTERVAL_MSEC  1000
+#define REPORTING_INTERVAL_MSEC 5000
+#define UPDATING_INTERVAL_MSEC  2000
+
 static unsigned long furnace_state_time = 0;
-static unsigned long bm1_state_time = 0;
 static unsigned long prev_report_time = 0;
 static unsigned long prev_update_time = 0;
-
-void i2cReqHandler(void);
-void i2cReqMoreHandler(void);
-void i2cRecvHandler(int);
-
-void updateBusmoduleTargets(int power, int vlTempC, int wwTempC, int stopPump);
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -176,9 +175,9 @@ void i2cReqMoreHandler(void)
 #ifdef SERIAL_I2C_TRACE
     // Serial debug dump, likely too slow in this ISR
     Serial.print("snd ct'd: addr 0x");
-    Serial.print(base_addr, HEX);
+    Serial.print(byte_to_hex(base_addr));
     Serial.print(" byte 0x");
-    Serial.println(data, HEX);
+    Serial.println(byte_to_hex(data));
 #endif
 }
 
@@ -204,7 +203,7 @@ void i2cRecvHandler(int nbytes)
 #ifdef SERIAL_I2C_TRACE
     // Serial debug dump, likely too slow in this ISR
     Serial.print("rcv: addr 0x");
-    Serial.print(base_addr, HEX);
+    Serial.print(byte_to_hex(base_addr));
     Serial.print(" n=");
     Serial.print(nbytes, DEC);
     if (nbytes <= 1) {
@@ -215,44 +214,15 @@ void i2cRecvHandler(int nbytes)
           // pseudo: print(" ram[%02X]:%02X", addr, data[addr]);
           Serial.print(" ram[");
           Serial.print("0x");
-          Serial.print(base_addr + n, HEX);
+          Serial.print(byte_to_hex(base_addr + n));
           Serial.print("]:");
           Serial.print("0x");
-          Serial.print(shmem.raw_data[base_addr + n], HEX);
+          Serial.print(byte_to_hex(shmem.raw_data[base_addr + n]));
           n++;
         }
         Serial.println("");
     }
 #endif
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-//// THERMAL CONTROL INFO
-////////////////////////////////////////////////////////////////////////////////////////////////
-
-void updateBusmoduleTargets(int power, int vlTempC, int wwTempC, int stopPump)
-{
-  shmem.fields.bm1_data_avail = 0;
-  
-  shmem.fields.bm1_state.power = power;
-  shmem.fields.bm1_state.vlSet_x2 = 2*vlTempC;
-  shmem.fields.bm1_state.wwSet_x2 = 2*wwTempC;
-  shmem.fields.bm1_state.stopPump = stopPump;
-  shmem.fields.bm1_state.error = 0x00;
-
-  shmem.fields.bm1_state.dummy1 = 1;
-  shmem.fields.bm1_state.dummy2 = 1;
-  shmem.fields.bm1_state.dummy4 = 0xFF;
-
-  shmem.fields.bm1_state.checksum = 0;
-  uint8_t* dd = (uint8_t*)&shmem.fields.bm1_state;
-  while (dd < (uint8_t*)&shmem.fields.bm1_state.checksum) {
-    shmem.fields.bm1_state.checksum = crc8(shmem.fields.bm1_state.checksum, *dd);
-    dd++;
-  }
-
-  shmem.fields.bm1_data_avail = 1;
 }
 
 
@@ -302,50 +272,54 @@ void loop()
     memcpy(&sampled_furnace_state, (void*)&shmem.fields.furnace_state, sizeof(sampled_furnace_state));
     shmem.fields.furnace_data_avail = 0;  // 'ack'
 
-    Serial.println("New data from furnace");
-    furnace_state_time = t;
-
     // For whatever it is worth, do as in https://www.mikrocontroller.net/attachment/590667/junkers.cpp and set these to 0:
     shmem.raw_data[0x12] = 0;
     shmem.raw_data[0x13] = 0;
     shmem.raw_data[0x14] = 0;
     shmem.raw_data[0x18] = 0;
+
+    Serial.println(furnaceStateToStr(sampled_furnace_state));
+
+    furnace_state_time = t;
  }
 
   // Regularly push out temperature setpoints into memory,
   // for the Junkers boiler to pick up sometime
   if ((t - prev_update_time) > UPDATING_INTERVAL_MSEC) {
-    updateBusmoduleTargets(/*power:*/ 0xFF, /*vlTempC:*/10, /*wwTempC:*/10, /*stopPump:*/0x00);
-    Serial.println("Updated own temperature setpoints");
-    prev_update_time = t;
-  }
-
-  // Check for (self-)updated temperature setpoints
-  if (shmem.fields.bm1_data_avail && (t - bm1_state_time) > SAMPLING_INTERVAL_MSEC) {
+    //updateBusmoduleTargets(shmem, /*power:*/ 0xFF, /*vlTempC:*/10, /*wwTempC:*/10, /*stopPump:*/0x00);
+    updateBusmoduleTargets(shmem, /*power:*/ 128, /*vlTempC:*/10, /*wwTempC:*/10, /*stopPump:*/0x01);
+    //updateBusmoduleTargets(shmem, /*power:*/ 128, /*vlTempC:*/30, /*wwTempC:*/10, /*stopPump:*/0x00);
+    //updateBusmoduleTargets(shmem, /*power:*/ 128, /*vlTempC:*/50, /*wwTempC:*/10, /*stopPump:*/0x00);
+    //updateBusmoduleTargets(shmem, /*power:*/ 0xFF, /*vlTempC:*/50, /*wwTempC:*/10, /*stopPump:*/0x00);
+    //updateBusmoduleTargets(shmem, /*power:*/ 128, /*vlTempC:*/10, /*wwTempC:*/45, /*stopPump:*/0x00);
     memcpy(&sampled_bm1_state, (void*)&shmem.fields.bm1_state, sizeof(sampled_bm1_state));
-    Serial.println("New data from BM1/ourselves");
-    bm1_state_time = t;
+
+    Serial.println(busmoduleStateToStr(sampled_bm1_state));
+
+    prev_update_time = t;
   }
   
   // Regularly debug-dump the I2C statistics and last-seen Junkers and own setpoint states
   if ((t - prev_report_time) > REPORTING_INTERVAL_MSEC) {
-    String s;
-
-    ramDatablockStr((const I2C_RAM_t*)&shmem, s);
-    Serial.println(s);
-  
+    //Serial.println( ramDatablockStr((const I2C_RAM_t*)&shmem) );
+    if (1) {
+      unsigned char addr = 0, k, n;
+      for (k=0; k<16; k++) {
+        String s;
+        s += String("addr 0x") + byte_to_hex(addr) + String(" : ");
+        for (n=0; n<16; n++) {
+          s += byte_to_hex(shmem.raw_data[addr]) + String(" ");
+          addr++;
+        }
+        Serial.println(s);
+      }
+    }
     Serial.print("i2c rx:");
     Serial.print(i2c_rx_count, DEC);
     Serial.print(" tx:");
     Serial.print(i2c_tx_count, DEC);
     Serial.print(" addr:0x");
-    Serial.println(i2c_last_cmd_offset, HEX);
-
-    furnaceStateStr(sampled_furnace_state, s);
-    Serial.println(s);
-
-    busmoduleStateStr(sampled_bm1_state, s);
-    Serial.println(s);
+    Serial.println(byte_to_hex(i2c_last_cmd_offset));
 
     prev_report_time = t;
   }
