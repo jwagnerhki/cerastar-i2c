@@ -192,6 +192,9 @@ void setup()
   Serial.println("Junkers BM1 on-board I2C 256-byte RAM emulator");
   Serial.print("Listening on I2C address ");
   Serial.println(I2C_TARGET_ADDR, HEX);
+
+  // Set heating defaults
+  updateBusmoduleTargets(shmem, /*power:*/ 0xFF, /*vlTempC:*/10, /*wwTempC:*/10, /*stopPump:*/0x00);
 }
 
 

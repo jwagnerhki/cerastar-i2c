@@ -57,6 +57,16 @@ String busmoduleStateToStr(const BusmoduleState_t& s)
 //// THERMAL CONTROL
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
+static void s_recomputeBusmoduleDataCRC(volatile I2C_RAM_t& shmem)
+{
+  shmem.fields.bm1_state.checksum = 0;
+  uint8_t* dd = (uint8_t*)&shmem.fields.bm1_state;
+  while (dd < (uint8_t*)&shmem.fields.bm1_state.checksum) {
+    shmem.fields.bm1_state.checksum = crc8(shmem.fields.bm1_state.checksum, *dd);
+    dd++;
+  }
+}
+
 void updateBusmoduleTargets(volatile I2C_RAM_t& shmem, unsigned char power, unsigned char vlTempC, unsigned char wwTempC, unsigned char stopPump)
 {
   shmem.fields.bm1_data_avail = 0;
@@ -69,14 +79,59 @@ void updateBusmoduleTargets(volatile I2C_RAM_t& shmem, unsigned char power, unsi
 
   shmem.fields.bm1_state.dummy1 = 1;
   shmem.fields.bm1_state.dummy2 = 1;
-  shmem.fields.bm1_state.dummy4 = 0xFF;
+  shmem.fields.bm1_state.dummy4 = 0xFF; // might be Leistungsbegrenzung, but, forum, "Ich habe nur die i2c ram addressen 0x90 und 0x9e versucht [...] Aber damit kann ich die Therme nicht regeln"
 
-  shmem.fields.bm1_state.checksum = 0;
-  uint8_t* dd = (uint8_t*)&shmem.fields.bm1_state;
-  while (dd < (uint8_t*)&shmem.fields.bm1_state.checksum) {
-    shmem.fields.bm1_state.checksum = crc8(shmem.fields.bm1_state.checksum, *dd);
-    dd++;
-  }
+  s_recomputeBusmoduleDataCRC(shmem);
 
   shmem.fields.bm1_data_avail = 1;
 }
+
+void furnaceStopPump(volatile I2C_RAM_t& shmem)
+{
+  shmem.fields.bm1_data_avail = 0;
+  shmem.fields.bm1_state.stopPump = 0x01;
+  s_recomputeBusmoduleDataCRC(shmem);
+  shmem.fields.bm1_data_avail = 1;
+}
+
+void furnaceStartPump(volatile I2C_RAM_t& shmem)
+{
+  shmem.fields.bm1_data_avail = 0;
+  shmem.fields.bm1_state.stopPump = 0x00;
+  s_recomputeBusmoduleDataCRC(shmem);
+  shmem.fields.bm1_data_avail = 1;
+}
+
+void furnaceStopHeating(volatile I2C_RAM_t& shmem)
+{
+  shmem.fields.bm1_data_avail = 0;
+  shmem.fields.bm1_state.vlSet_x2 = 2*10;
+  shmem.fields.bm1_state.wwSet_x2 = 2*10;
+  s_recomputeBusmoduleDataCRC(shmem);
+  shmem.fields.bm1_data_avail = 1;
+}
+
+void furnaceSetPowerlevel(volatile I2C_RAM_t& shmem, unsigned char powerLev)
+{
+  shmem.fields.bm1_data_avail = 0;  
+  shmem.fields.bm1_state.power = powerLev;
+  s_recomputeBusmoduleDataCRC(shmem);
+  shmem.fields.bm1_data_avail = 1;
+}
+
+void furnaceSetHeatingSetpoint(volatile I2C_RAM_t& shmem, unsigned char tempC)
+{
+  shmem.fields.bm1_data_avail = 0;
+  shmem.fields.bm1_state.vlSet_x2 = 2*tempC;
+  s_recomputeBusmoduleDataCRC(shmem);
+  shmem.fields.bm1_data_avail = 1;
+}
+
+void furnaceSetHotWaterSetpoint(volatile I2C_RAM_t& shmem, unsigned char tempC)
+{
+  shmem.fields.bm1_data_avail = 0;
+  shmem.fields.bm1_state.wwSet_x2 = 2*tempC;
+  s_recomputeBusmoduleDataCRC(shmem);
+  shmem.fields.bm1_data_avail = 1;
+}
+
